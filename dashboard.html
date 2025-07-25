@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cyber Threat Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --cyber-red: #ff2a6d;
+            --cyber-blue: #05d9e8;
+            --cyber-yellow: #f9f002;
+            --cyber-purple: #d300c5;
+        }
+        
+        body {
+            background-color: #0d0221; 
+            color: #ffffff; 
+            font-family: 'Courier New', monospace;
+        }
+        
+        
+        .card-header, .card-body, .threat-card, .timestamp, 
+        .alert, .text-muted, #current-time, #last-update {
+            color: #ffffff !important;
+            text-shadow: none !important;
+        }
+        
+       
+        .card-header {
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--cyber-blue) !important;
+            background-color: rgba(0,0,0,0.3) !important;
+        }
+        
+        .threat-card {
+            background: rgba(13, 2, 33, 0.7);
+            border-left: 3px solid var(--cyber-blue);
+            margin-bottom: 10px;
+            animation: fadeIn 0.5s;
+            transition: all 0.3s;
+            box-shadow: 0 0 10px rgba(5, 217, 232, 0.2);
+            color: #ffffff !important;
+        }
+        
+      
+        .threat-card:hover {
+            box-shadow: 0 0 15px var(--cyber-blue);
+            transform: translateX(5px);
+        }
+        
+        .critical { 
+            border-left-color: var(--cyber-red);
+            background: rgba(255, 42, 109, 0.1);
+        }
+        
+        .warning { 
+            border-left-color: var(--cyber-yellow);
+            background: rgba(249, 240, 2, 0.1);
+        }
+        
+        #threat-map { 
+            height: 300px; 
+            background: rgba(5, 217, 232, 0.1);
+            border: 1px solid var(--cyber-blue);
+        }
+        
+        .btn-outline-warning {
+            animation: pulse 2s infinite;
+        }
+
+        .btn-report {
+            background: linear-gradient(135deg, var(--cyber-purple) 0%, var(--cyber-blue) 100%);
+            border: none;
+            color: #ffffff !important; 
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .btn-report:hover {
+            color: #ffffff !important;
+            transform: translateY(-2px);
+            box-shadow: 0 0 15px var(--cyber-purple);
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(249, 240, 2, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(249, 240, 2, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(249, 240, 2, 0); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .timestamp {
+            font-size: 0.8rem;
+            color: #ffffff !important;
+        }
+        
+        .threat-marker {
+            background: transparent;
+            border: none;
+            color: var(--cyber-yellow);
+            font-size: 20px;
+            text-align: center;
+            line-height: 30px;
+        }
+        
+        .critical-marker {
+            color: var(--cyber-red);
+            text-shadow: 0 0 10px var(--cyber-red);
+        }
+        
+        .warning-marker {
+            color: var(--cyber-yellow);
+            text-shadow: 0 0 10px var(--cyber-yellow);
+        }
+        
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            width: 300px;
+            box-shadow: 0 0 20px rgba(5, 217, 232, 0.5);
+            border: 1px solid var(--cyber-blue);
+            color: #ffffff !important;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="container py-4">
+       
+        <div id="alerts-container"></div>
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="text-info">
+                <i class="fas fa-shield-alt"></i> CYBER THREAT DASHBOARD
+                <small class="timestamp ms-2" id="current-time"></small>
+            </h1>
+            <div>
+                <button id="demo-btn" class="btn btn-outline-warning">
+                    <i class="fas fa-bolt"></i> DEMO MODE
+                </button>
+                <button id="report-btn" class="btn btn-report">
+                    <i class="fas fa-file-pdf"></i> GENERATE REPORT
+                </button>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card bg-transparent border-info mb-4">
+                    <div class="card-header bg-info text-white"> <!-- Changed to text-white -->
+                        <i class="fas fa-bolt"></i> LIVE THREATS
+                        <span class="badge bg-danger float-end" id="active-threats">0 ACTIVE</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="threats-container" style="max-height: 400px; overflow-y: auto;">
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-info"></div>
+                                <p class="mt-2">Initializing threat detection systems...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card bg-transparent border-info mb-4">
+                    <div class="card-header bg-info text-white"> <!-- Changed to text-white -->
+                        <i class="fas fa-map-marked-alt"></i> GLOBAL THREAT MAP
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="threat-map"></div>
+                    </div>
+                </div>
+                
+                <div class="card bg-transparent border-warning mb-4">
+                    <div class="card-header bg-warning text-white"> <!-- Changed to text-white -->
+                        <i class="fas fa-chart-bar"></i> SECURITY STATS
+                    </div>
+                    <div class="card-body">
+                        <p>Total Threats: <span class="float-end" id="total-threats">0</span></p>
+                        <p>Blocked IPs: <span class="float-end" id="block-count">0</span></p>
+                        <p>Last Update: <span class="float-end timestamp" id="last-update">--:--:--</span></p>
+                        <hr>
+                        <p>System Status: <span class="float-end text-success" id="system-status">OPERATIONAL</span></p>
+                    </div>
+                </div>
+                
+                <div class="card bg-transparent border-success">
+                    <div class="card-header bg-success text-white"> 
+                        <i class="fas fa-network-wired"></i> NETWORK MONITOR
+                    </div>
+                    <div class="card-body">
+                        <div>
+                            <small>Network Load</small>
+                            <div class="progress bg-dark" style="height: 5px;">
+                                <div class="progress-bar bg-warning" id="network-usage" style="width: 15%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        
+        const map = L.map('threat-map', {
+            attributionControl: false,
+            zoomControl: false
+        }).setView([20, 0], 2);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(map);
+        
+      
+        let threatCount = 0;
+        let activeThreats = 0;
+        let blockedIPs = 0;
+        
+        
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = 
+                `${now.getHours().toString().padStart(2, '0')}:` +
+                `${now.getMinutes().toString().padStart(2, '0')}:` +
+                `${now.getSeconds().toString().padStart(2, '0')}`;
+                
+            document.getElementById('last-update').textContent = 
+                `${now.getHours().toString().padStart(2, '0')}:` +
+                `${now.getMinutes().toString().padStart(2, '0')}:` +
+                `${now.getSeconds().toString().padStart(2, '0')}`;
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        
+        function updateNetworkStats() {
+            
+            let netUsage = 5 + Math.random() * 20;
+            if(Math.random() > 0.9) netUsage = 30 + Math.random() * 20;
+            document.getElementById('network-usage').style.width = `${netUsage}%`;
+            
+            
+            if(Math.random() > 0.95) {
+                const status = document.getElementById('system-status');
+                status.classList.remove('text-success');
+                status.classList.add('text-warning');
+                status.textContent = "MINOR ISSUES";
+                
+                setTimeout(() => {
+                    status.classList.remove('text-warning');
+                    status.classList.add('text-success');
+                    status.textContent = "OPERATIONAL";
+                }, 5000);
+            }
+        }
+        setInterval(updateNetworkStats, 3000);
+        updateNetworkStats();
+        
+        // Show alert notification
+        function showAlert(message, type = "warning") {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                <strong>${type === 'danger' ? 'CRITICAL ALERT' : 'WARNING'}</strong> 
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.getElementById('alerts-container').appendChild(alert);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+        
+        // Socket.IO connection
+        const socket = io();
+        
+        // Handle new threats
+        socket.on('new_alert', (threat) => {
+            threatCount++;
+            activeThreats++;
+            addThreatCard(threat);
+            updateMap(threat);
+            updateStats();
+            
+            // Critical threat handling
+            if(threat.severity > 3) {
+                showAlert(`Critical threat detected from ${threat.ip} (${threat.type})`, "danger");
+            } else {
+                showAlert(`New threat detected from ${threat.ip} (${threat.type})`);
+            }
+        });
+        
+        // Handle threat resolution
+        socket.on('threat_resolved', (threat) => {
+            activeThreats--;
+            updateStats();
+        });
+
+        function addThreatCard(threat) {
+            const container = document.getElementById('threats-container');
+            
+            // Remove loading message if present
+            if(container.children.length === 1 && container.children[0].classList.contains('text-center')) {
+                container.innerHTML = '';
+            }
+            
+            const now = new Date();
+            const timestamp = `${now.getHours().toString().padStart(2, '0')}:` +
+                              `${now.getMinutes().toString().padStart(2, '0')}:` +
+                              `${now.getSeconds().toString().padStart(2, '0')}`;
+            
+            const card = document.createElement('div');
+            card.className = `threat-card p-3 ${threat.severity > 3 ? 'critical' : 'warning'}`;
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${threat.ip}</strong>
+                        <div class="text-muted">${threat.type}</div>
+                        <small class="timestamp">${timestamp}</small>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-danger me-2" 
+                                onclick="blockIP('${threat.ip}')">
+                            <i class="fas fa-ban"></i> BLOCK
+                        </button>
+                        <span class="badge ${threat.severity > 3 ? 'bg-danger' : 'bg-warning'}">
+                            ${threat.severity > 3 ? 'CRITICAL' : 'WARNING'}
+                        </span>
+                    </div>
+                </div>
+            `;
+            container.prepend(card);
+            
+            // Auto-remove threat after 5 minutes
+            setTimeout(() => {
+                if(card.parentNode) {
+                    card.remove();
+                    activeThreats--;
+                    updateStats();
+                }
+            }, 300000);
+        }
+
+        function updateMap(threat) {
+            if (!threat.location) return;
+            const marker = L.marker([threat.location.lat, threat.location.lon], {
+                icon: L.divIcon({
+                    className: `threat-marker ${threat.severity > 3 ? 'critical-marker' : 'warning-marker'}`,
+                    html: `<i class="fas fa-${threat.severity > 3 ? 'skull' : 'exclamation-triangle'}"></i>`,
+                    iconSize: [30, 30]
+                })
+            }).bindPopup(`
+                <b>${threat.ip}</b><br>
+                ${threat.type}<br>
+                ${threat.severity > 3 ? 'CRITICAL' : 'WARNING'}<br>
+                <small>${new Date().toLocaleString()}</small>
+            `);
+            
+            marker.addTo(map);
+            
+            // Auto-remove marker after 5 minutes
+            setTimeout(() => {
+                if(map.hasLayer(marker)) {
+                    map.removeLayer(marker);
+                }
+            }, 300000);
+        }
+
+        function updateStats() {
+            document.getElementById('total-threats').textContent = threatCount;
+            document.getElementById('block-count').textContent = blockedIPs;
+            document.getElementById('active-threats').textContent = `${activeThreats} ACTIVE`;
+        }
+
+        function blockIP(ip) {
+            fetch(`/block/${ip}`)
+                .then(res => res.json())
+                .then(data => {
+                    blockedIPs++;
+                    updateStats();
+                    
+                    // Visual feedback
+                    showAlert(`IP ${ip} has been blocked`, "success");
+                    
+                    // Find and remove any threats from this IP
+                    document.querySelectorAll('.threat-card').forEach(card => {
+                        if(card.textContent.includes(ip)) {
+                            card.remove();
+                            activeThreats--;
+                            updateStats();
+                        }
+                    });
+                })
+                .catch(err => {
+                    showAlert(`Failed to block IP ${ip}`, "danger");
+                });
+        }
+
+        // Demo mode
+        document.getElementById('demo-btn').addEventListener('click', () => {
+            fetch('/mock_threat')
+                .then(() => {
+                    showAlert("Demo mode activated. Generating mock threats...", "info");
+                })
+                .catch(err => {
+                    showAlert("Failed to activate demo mode", "danger");
+                });
+        });
+
+        // Report Generation
+        document.getElementById('report-btn').addEventListener('click', generateReport);
+
+        function generateReport() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            
+            doc.setFillColor(13, 2, 33);
+            doc.rect(0, 0, 210, 30, 'F');
+            doc.setFontSize(20);
+            doc.setTextColor(5, 217, 232);
+            doc.text('CYBER THREAT REPORT', 105, 20, { align: 'center' });
+            
+            
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0); // Black text
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 35);
+            
+            
+            doc.setFontSize(16);
+            doc.setTextColor(255, 42, 109);
+            doc.text('SECURITY OVERVIEW', 14, 50);
+            
+            doc.setFontSize(12);
+            doc.setTextColor(0, 0, 0); 
+            doc.text(`Total Threats Detected: ${threatCount}`, 14, 60);
+            doc.text(`Blocked IP Addresses: ${blockedIPs}`, 14, 70);
+            doc.text(`Active Threats: ${activeThreats}`, 14, 80);
+            
+           
+            doc.setFontSize(16);
+            doc.setTextColor(255, 42, 109);
+            doc.text('RECENT THREATS', 14, 95);
+            
+            const threats = Array.from(document.querySelectorAll('.threat-card')).slice(0, 5);
+            if (threats.length > 0) {
+                threats.forEach((threat, index) => {
+                    const yPos = 105 + (index * 15);
+                    doc.setFontSize(10);
+                    doc.setTextColor(0, 0, 0); // Black text
+                    doc.text(
+                        `${threat.querySelector('.timestamp').textContent} - ${threat.querySelector('strong').textContent}`,
+                        14,
+                        yPos
+                    );
+                    doc.text(
+                        `Type: ${threat.querySelector('.text-muted').textContent}`,
+                        14,
+                        yPos + 5
+                    );
+                });
+            } else {
+                doc.setFontSize(10);
+                doc.setTextColor(0, 0, 0); 
+                doc.text('No recent threats detected', 14, 105);
+            }
+            
+            
+            doc.setFontSize(10);
+            doc.setTextColor(0, 0, 0); 
+            doc.text('© Cyber Threat Dashboard - Generated Report', 105, 285, { align: 'center' });
+            
+            
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            doc.save(`threat_report_${timestamp}.pdf`);
+            
+            
+            showAlert("PDF report generated successfully!", "success");
+        }
+    </script>
+</body>
+</html>
